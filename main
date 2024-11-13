@@ -1,0 +1,309 @@
+import React, { useState } from 'react';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+
+// Utility to safely parse numbers
+const safeParseFloat = (value) => {
+  const parsed = parseFloat(value);
+  return isNaN(parsed) ? 0 : parsed;
+};
+
+const BinocularVisionAnalyzer = () => {
+  const [values, setValues] = useState({
+    npc: '', npa: '', stereopsis: '', phoria_distance: '', phoria_near: '', vertical_phoria: '', nra: '', pra: '', monocular_estimation: '', lag_lead: '', amplitude_od: '', amplitude_os: '', af_od: '', af_os: '', af_ou: '', bof_blur_dist: '', bof_break_dist: '', bof_recovery_dist: '', bif_blur_dist: '', bif_break_dist: '', bif_recovery_dist: '', bof_blur_near: '', bof_break_near: '', bof_recovery_near: '', bif_blur_near: '', bif_break_near: '', bif_recovery_near: '', vergence_facility: '', fixation_disparity: '', ac_ratio: '', pupils: 'normal', pursuits: 'normal', saccades: 'normal'
+  });
+
+  const [diagnosis, setDiagnosis] = useState([]);
+  const [sheardCriterion, setSheardCriterion] = useState(null);
+  const [percivals, setPercivals] = useState(null);
+  const [graphs, setGraphs] = useState(null);
+  const [age, setAge] = useState(30); // Placeholder for dynamic age
+
+  const normalRanges = {
+    npc: { min: 0, max: 10, unit: 'cm', description: 'Near Point of Convergence' },
+    npa: { min: 0, max: 8, unit: 'cm', description: 'Near Point of Accommodation' },
+    stereopsis: { min: 0, max: 40, unit: 'arc seconds', description: 'Stereopsis' },
+    phoria_distance: { min: -2, max: 2, unit: 'pd', description: 'Distance Phoria' },
+    phoria_near: { min: -6, max: 0, unit: 'pd', description: 'Near Phoria' },
+    vertical_phoria: { min: -1, max: 1, unit: 'pd', description: 'Vertical Phoria' },
+    nra: { min: 1.75, max: 2.25, unit: 'D', description: 'Negative Relative Accommodation' },
+    pra: { min: 1.75, max: 2.25, unit: 'D', description: 'Positive Relative Accommodation' },
+    monocular_estimation: { min: 0.25, max: 0.75, unit: 'D', description: 'MEM Retinoscopy' },
+    lag_lead: { min: 0.25, max: 0.75, unit: 'D', description: 'Accommodative Lag/Lead' },
+    amplitude_od: { min: 15 - 0.25 * age, max: 25 - 0.25 * age, unit: 'D', description: 'Amplitude OD' },
+    amplitude_os: { min: 15 - 0.25 * age, max: 25 - 0.25 * age, unit: 'D', description: 'Amplitude OS' },
+    af_od: { min: 11, max: 99, unit: 'cpm', description: 'Accommodative Facility OD' },
+    af_os: { min: 11, max: 99, unit: 'cpm', description: 'Accommodative Facility OS' },
+    af_ou: { min: 11, max: 99, unit: 'cpm', description: 'Accommodative Facility OU' },
+    vergence_facility: { min: 15, max: 99, unit: 'cpm', description: 'Vergence Facility' },
+    ac_ratio: { min: 4, max: 6, unit: ':1', description: 'AC/A Ratio' }
+  };
+
+  const handleInputChange = (e) => {
+    setValues({
+      ...values,
+      [e.target.name]: e.target.value
+    });
+  };
+
+  const calculateSheardCriterion = () => {
+    if (values.phoria_near && values.bof_break_near) {
+      const phoria = Math.abs(safeParseFloat(values.phoria_near));
+      const compensating_vergence = safeParseFloat(values.bof_break_near) / 2;
+      if (isNaN(phoria) || isNaN(compensating_vergence)) {
+        return { valid: false, error: 'Invalid input for Sheard Criterion' };
+      }
+      return { valid: compensating_vergence >= phoria, error: null };
+    }
+    return { valid: false, error: 'Missing required values for Sheard Criterion' };
+  };
+
+  const calculatePercivals = () => {
+    if (values.bof_break_near && values.bif_break_near) {
+      const bo = safeParseFloat(values.bof_break_near);
+      const bi = safeParseFloat(values.bif_break_near);
+      const ideal = (bo - bi) / 3;
+      if (Math.abs(safeParseFloat(values.phoria_near)) <= ideal) {
+        return { valid: true, error: null };
+      }
+      return { valid: false, error: 'Percival\'s Criterion not met' };
+    }
+    return { valid: false, error: 'Missing required values for Percival\'s Criterion' };
+  };
+
+  const generateGraphData = () => {
+    const vergenceData = [
+      {
+        name: 'Distance',
+        BI_Break: -safeParseFloat(values.bif_break_dist),
+        BI_Recovery: -safeParseFloat(values.bif_recovery_dist),
+        BO_Break: safeParseFloat(values.bof_break_dist),
+        BO_Recovery: safeParseFloat(values.bof_recovery_dist),
+      },
+      {
+        name: 'Near',
+        BI_Break: -safeParseFloat(values.bif_break_near),
+        BI_Recovery: -safeParseFloat(values.bif_recovery_near),
+        BO_Break: safeParseFloat(values.bof_break_near),
+        BO_Recovery: safeParseFloat(values.bof_recovery_near),
+      },
+    ];
+    return vergenceData;
+  };
+
+  const analyzeResults = () => {
+    const abnormalities = [];
+    const possibleDiagnoses = new Set();
+    
+    if (values.npc && safeParseFloat(values.npc) > normalRanges.npc.max) {
+      abnormalities.push(`NPC receded (${values.npc} cm)`);
+      possibleDiagnoses.add('Convergence Insufficiency');
+    }
+
+    if (values.amplitude_od && safeParseFloat(values.amplitude_od) < 15) {
+      abnormalities.push(`Reduced accommodative amplitude OD (${values.amplitude_od} D)`);
+      possibleDiagnoses.add('Accommodative Insufficiency');
+    }
+
+    if (values.af_ou && safeParseFloat(values.af_ou) < normalRanges.af_ou.min) {
+      abnormalities.push(`Reduced accommodative facility (${values.af_ou} cpm)`);
+      possibleDiagnoses.add('Accommodative Infacility');
+    }
+
+    if (values.ac_ratio) {
+      const acaRatio = safeParseFloat(values.ac_ratio);
+      if (acaRatio > normalRanges.ac_ratio.max) {
+        abnormalities.push(`High AC/A ratio (${values.ac_ratio}:1)`);
+        possibleDiagnoses.add('Convergence Excess');
+      } else if (acaRatio < normalRanges.ac_ratio.min) {
+        abnormalities.push(`Low AC/A ratio (${values.ac_ratio}:1)`);
+        possibleDiagnoses.add('Convergence Insufficiency');
+      }
+    }
+
+    if (values.phoria_distance && values.phoria_near) {
+      const distPhoria = safeParseFloat(values.phoria_distance);
+      const nearPhoria = safeParseFloat(values.phoria_near);
+      if (distPhoria < -2 && nearPhoria < -6) {
+        abnormalities.push('Basic Exophoria pattern');
+        possibleDiagnoses.add('Exophoria');
+      }
+    }
+
+    if (abnormalities.length > 0) {
+      setDiagnosis([...abnormalities]);
+    }
+
+    const sheardResult = calculateSheardCriterion();
+    const percivalResult = calculatePercivals();
+    setSheardCriterion(sheardResult);
+    setPercivals(percivalResult);
+
+    setGraphs(generateGraphData());
+  };
+
+  return (
+    <div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Binocular Vision Analyzer</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="basic">
+            <TabsList>
+              <TabsTrigger value="basic">Basic</TabsTrigger>
+              <TabsTrigger value="accommodative">Accommodative</TabsTrigger>
+              <TabsTrigger value="vergence">Vergence</TabsTrigger>
+              <TabsTrigger value="additional">Additional</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="basic">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">NPC (cm)</label>
+                  <Input
+                    type="number"
+                    name="npc"
+                    value={values.npc}
+                    onChange={handleInputChange}
+                    placeholder="Enter NPC"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">NPA (cm)</label>
+                  <Input
+                    type="number"
+                    name="npa"
+                    value={values.npa}
+                    onChange={handleInputChange}
+                    placeholder="Enter NPA"
+                  />
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="accommodative">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">NRA (D)</label>
+                  <Input
+                    type="number"
+                    name="nra"
+                    value={values.nra}
+                    onChange={handleInputChange}
+                    placeholder="Enter NRA"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">PRA (D)</label>
+                  <Input
+                    type="number"
+                    name="pra"
+                    value={values.pra}
+                    onChange={handleInputChange}
+                    placeholder="Enter PRA"
+                  />
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="vergence">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">BI Break Distance (pd)</label>
+                  <Input
+                    type="number"
+                    name="bif_break_dist"
+                    value={values.bif_break_dist}
+                    onChange={handleInputChange}
+                    placeholder="Enter BI Break Distance"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">BO Break Distance (pd)</label>
+                  <Input
+                    type="number"
+                    name="bof_break_dist"
+                    value={values.bof_break_dist}
+                    onChange={handleInputChange}
+                    placeholder="Enter BO Break Distance"
+                  />
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="additional">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Accommodative Facility OU (cpm)</label>
+                  <Input
+                    type="number"
+                    name="af_ou"
+                    value={values.af_ou}
+                    onChange={handleInputChange}
+                    placeholder="Enter Accommodative Facility OU"
+                  />
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
+
+          <div className="mt-6">
+            <Button onClick={analyzeResults}>Analyze</Button>
+          </div>
+
+          {/* Display Analysis */}
+          {diagnosis.length > 0 && (
+            <div className="mt-4">
+              <h3 className="text-lg font-semibold">Abnormalities Detected:</h3>
+              <ul>
+                {diagnosis.map((abnormality, idx) => (
+                  <li key={idx} className="text-red-500">{abnormality}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Sheard Criterion */}
+          {sheardCriterion && (
+            <Alert variant="danger" className="mt-4">
+              <AlertDescription>
+                {sheardCriterion.error ? sheardCriterion.error : 'Sheard Criterion is valid.'}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Percival's Criterion */}
+          {percivals && (
+            <Alert variant="danger" className="mt-4">
+              <AlertDescription>
+                {percivals.error ? percivals.error : 'Percival\'s Criterion is valid.'}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Vergence Graph */}
+          {graphs && (
+            <LineChart width={500} height={300} data={graphs}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Line type="monotone" dataKey="BO_Break" stroke="#8884d8" />
+              <Line type="monotone" dataKey="BO_Recovery" stroke="#82ca9d" />
+              <Line type="monotone" dataKey="BI_Break" stroke="#ffc658" />
+              <Line type="monotone" dataKey="BI_Recovery" stroke="#ff7300" />
+            </LineChart>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+export default BinocularVisionAnalyzer;
