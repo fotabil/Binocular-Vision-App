@@ -1,0 +1,201 @@
+import React, { useState } from 'react';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+
+const BinocularVisionAnalyzer = () => {
+  const [values, setValues] = useState({
+    npc: '', // Near point of convergence (cm)
+    npa: '', // Near point of accommodation (cm)
+    stereopsis: '', // Seconds of arc
+    phoria_distance: '', // Prism diopters
+    phoria_near: '', // Prism diopters
+    nra: '', // Negative relative accommodation
+    pra: '', // Positive relative accommodation
+    bof_blur: '', // Base out to blur
+    bof_break: '', // Base out to break
+    bof_recovery: '', // Base out recovery
+    bif_blur: '', // Base in to blur
+    bif_break: '', // Base in to break
+    bif_recovery: '', // Base in recovery
+    af_od: '', // Accommodative facility OD (cpm)
+    af_os: '', // Accommodative facility OS (cpm)
+    af_ou: '', // Accommodative facility OU (cpm)
+  });
+
+  const [diagnosis, setDiagnosis] = useState([]);
+
+  const normalRanges = {
+    npc: { min: 0, max: 10, unit: 'cm' },
+    npa: { min: 0, max: 8, unit: 'cm' },
+    stereopsis: { min: 0, max: 40, unit: 'arc seconds' },
+    phoria_distance: { min: -2, max: 2, unit: 'pd' },
+    phoria_near: { min: -6, max: 0, unit: 'pd' },
+    nra: { min: 1.75, max: 2.25, unit: 'D' },
+    pra: { min: 1.75, max: 2.25, unit: 'D' },
+    bof_blur: { min: 8, max: 12, unit: 'pd' },
+    bof_break: { min: 15, max: 20, unit: 'pd' },
+    bof_recovery: { min: 8, max: 12, unit: 'pd' },
+    bif_blur: { min: 8, max: 12, unit: 'pd' },
+    bif_break: { min: 15, max: 20, unit: 'pd' },
+    bif_recovery: { min: 8, max: 12, unit: 'pd' },
+    af_od: { min: 11, max: 99, unit: 'cpm' },
+    af_os: { min: 11, max: 99, unit: 'cpm' },
+    af_ou: { min: 11, max: 99, unit: 'cpm' },
+  };
+
+  const handleInputChange = (e) => {
+    setValues({
+      ...values,
+      [e.target.name]: e.target.value
+    });
+  };
+
+  const analyzeResults = () => {
+    const abnormalities = [];
+    const possibleDiagnoses = new Set();
+
+    // Check NPC
+    if (values.npc && parseFloat(values.npc) > normalRanges.npc.max) {
+      abnormalities.push(`NPC receded (${values.npc} cm)`);
+      possibleDiagnoses.add('Convergence Insufficiency');
+    }
+
+    // Check NPA
+    if (values.npa && parseFloat(values.npa) > normalRanges.npa.max) {
+      abnormalities.push(`NPA receded (${values.npa} cm)`);
+      possibleDiagnoses.add('Accommodative Insufficiency');
+    }
+
+    // Check Phorias
+    if (values.phoria_distance && parseFloat(values.phoria_distance) < normalRanges.phoria_distance.min) {
+      abnormalities.push(`Distance Exophoria (${values.phoria_distance} pd)`);
+      possibleDiagnoses.add('Basic Exophoria');
+    }
+    if (values.phoria_near && parseFloat(values.phoria_near) < normalRanges.phoria_near.min) {
+      abnormalities.push(`Near Exophoria (${values.phoria_near} pd)`);
+      possibleDiagnoses.add('Convergence Insufficiency');
+    }
+
+    // Check Accommodative Facility
+    if (values.af_ou && parseFloat(values.af_ou) < normalRanges.af_ou.min) {
+      abnormalities.push(`Reduced accommodative facility (${values.af_ou} cpm)`);
+      possibleDiagnoses.add('Accommodative Infacility');
+    }
+
+    // Check Fusional Reserves
+    if (values.bof_break && parseFloat(values.bof_break) < normalRanges.bof_break.min) {
+      abnormalities.push(`Reduced BO ranges (${values.bof_break} pd)`);
+      possibleDiagnoses.add('Convergence Insufficiency');
+    }
+
+    setDiagnosis([
+      ...abnormalities,
+      '',
+      'Possible diagnoses:',
+      ...Array.from(possibleDiagnoses)
+    ]);
+  };
+
+  return (
+    <Card className="w-full max-w-4xl">
+      <CardHeader>
+        <CardTitle>Binocular Vision Test Analyzer</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">NPC (cm)</label>
+              <Input
+                type="number"
+                name="npc"
+                value={values.npc}
+                onChange={handleInputChange}
+                placeholder="Enter NPC"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">NPA (cm)</label>
+              <Input
+                type="number"
+                name="npa"
+                value={values.npa}
+                onChange={handleInputChange}
+                placeholder="Enter NPA"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Distance Phoria (pd)</label>
+              <Input
+                type="number"
+                name="phoria_distance"
+                value={values.phoria_distance}
+                onChange={handleInputChange}
+                placeholder="Enter Distance Phoria"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Near Phoria (pd)</label>
+              <Input
+                type="number"
+                name="phoria_near"
+                value={values.phoria_near}
+                onChange={handleInputChange}
+                placeholder="Enter Near Phoria"
+              />
+            </div>
+          </div>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">BO Break (pd)</label>
+              <Input
+                type="number"
+                name="bof_break"
+                value={values.bof_break}
+                onChange={handleInputChange}
+                placeholder="Enter BO Break"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Accommodative Facility (cpm)</label>
+              <Input
+                type="number"
+                name="af_ou"
+                value={values.af_ou}
+                onChange={handleInputChange}
+                placeholder="Enter AF"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6">
+          <Button onClick={analyzeResults} className="w-full">
+            Analyze Results
+          </Button>
+        </div>
+
+        {diagnosis.length > 0 && (
+          <Alert className="mt-6">
+            <AlertDescription>
+              <div className="space-y-2">
+                {diagnosis.map((item, index) => (
+                  <div key={index}>{item}</div>
+                ))}
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <div className="mt-6 text-sm text-gray-500">
+          Note: This tool provides preliminary analysis only. Clinical judgment and comprehensive examination are required for final diagnosis.
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+export default BinocularVisionAnalyzer;
